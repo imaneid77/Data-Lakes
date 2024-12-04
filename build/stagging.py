@@ -34,7 +34,7 @@ def preprocess_to_staging(bucket_raw, bucket_staging, input_file, output_prefix)
     response = s3.get_object(Bucket=bucket_raw, Key=input_file)
     data = pd.read_parquet(io.BytesIO(response['Body'].read()))
 
-    # Step 2: Handle missing values
+    # Step 2: clean de data: suppression des doublons et des lignes vides 
     print("Cleaning data by removing missing values...")
     data = data.dropna()
 
@@ -42,6 +42,9 @@ def preprocess_to_staging(bucket_raw, bucket_staging, input_file, output_prefix)
     #print("Encoding labels...")
     #label_encoder = LabelEncoder()
     #data['class_encoded'] = label_encoder.fit_transform(data['family_accession'])
+
+    #créer une table texts avec les colonnes nécessaires 
+    #table=
 
     # Save the label encoder mapping
     label_mapping = dict(zip(label_encoder.classes_, label_encoder.transform(label_encoder.classes_)))
