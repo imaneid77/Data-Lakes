@@ -10,61 +10,6 @@ from numba import njit
 
 
 @njit
-def split_data_func(family_accession, class_encoded, test_ratio=0.33, dev_ratio=0.33):
-    """
-    Splits data into train, dev, and test indices based on unique classes.
-
-    Parameters:
-    family_accession (np.ndarray): Array of class labels (string or int).
-    class_encoded (np.ndarray): Array of encoded class labels (integers).
-    test_ratio (float): Ratio of data to allocate to the test set.
-    dev_ratio (float): Ratio of remaining data to allocate to the dev set.
-
-    Returns:
-    (np.ndarray, np.ndarray, np.ndarray): Indices for train, dev, and test sets.
-    """
-    unique_classes = np.unique(family_accession)
-    train_indices = []
-    dev_indices = []
-    test_indices = []
-
-    num_classes = len(unique_classes)
-
-    for cls in unique_classes:
-        # Find indices for this class
-        print(f"Handling class {cls} out of {num_classes}")
-        class_data_indices = np.where(family_accession == cls)[0]
-        count = len(class_data_indices)
-
-        # Handle edge cases based on the number of instances
-        if count == 1:
-            test_indices.extend(class_data_indices)
-        elif count == 2:
-            dev_indices.extend(class_data_indices[:1])
-            test_indices.extend(class_data_indices[1:])
-        elif count == 3:
-            train_indices.append(class_data_indices[0])
-            dev_indices.append(class_data_indices[1])
-            test_indices.append(class_data_indices[2])
-        else:
-            # Random shuffle
-            randomized_indices = np.random.permutation(class_data_indices)
-            num_test = int(count * test_ratio)
-            num_dev = int((count - num_test) * dev_ratio)
-
-            test_part = randomized_indices[:num_test]
-            dev_part = randomized_indices[num_test:num_test + num_dev]
-            train_part = randomized_indices[num_test + num_dev:]
-
-            train_indices.extend(train_part)
-            dev_indices.extend(dev_part)
-            test_indices.extend(test_part)
-
-    return (np.array(train_indices, dtype=np.int64),
-            np.array(dev_indices, dtype=np.int64),
-            np.array(test_indices, dtype=np.int64))
-
-
 def preprocess_to_staging(bucket_raw, bucket_staging, input_file, output_prefix):
     """
     Preprocesses data from the raw bucket and uploads preprocessed data splits to the staging bucket.
@@ -87,22 +32,22 @@ def preprocess_to_staging(bucket_raw, bucket_staging, input_file, output_prefix)
 
     # Step 1: Download raw data
     response = s3.get_object(Bucket=bucket_raw, Key=input_file)
-    data = pd.read_csv(io.BytesIO(response['Body'].read()))
+    data = pd.read_parquet(io.BytesIO(response['Body'].read()))
 
     # Step 2: Handle missing values
     print("Cleaning data by removing missing values...")
     data = data.dropna()
 
     # Step 3: Encode categorical labels
-    print("Encoding labels...")
-    label_encoder = LabelEncoder()
-    data['class_encoded'] = label_encoder.fit_transform(data['family_accession'])
+    #print("Encoding labels...")
+    #label_encoder = LabelEncoder()
+    #data['class_encoded'] = label_encoder.fit_transform(data['family_accession'])
 
     # Save the label encoder mapping
     label_mapping = dict(zip(label_encoder.classes_, label_encoder.transform(label_encoder.classes_)))
     label_mapping_csv = pd.DataFrame(list(label_mapping.items()), columns=['family_accession', 'class_encoded'])
     csv_buffer = io.StringIO()
-    label_mapping_csv.to_csv(csv_buffer, index=False)
+    label_mapping_csv.to_parquet(csv_buffer, index=False)
     s3.put_object(
         Bucket=bucket_staging,
         Key=f"{output_prefix}_label_mapping.csv",
@@ -133,7 +78,7 @@ def preprocess_to_staging(bucket_raw, bucket_staging, input_file, output_prefix)
     # Step 5: Upload preprocessed splits to staging bucket
     for split_name, split_data in zip(['train', 'dev', 'test'], [train_data, dev_data, test_data]):
         csv_buffer = io.StringIO()
-        split_data.to_csv(csv_buffer, index=False)
+        split_data.to_parquet(csv_buffer, index=False)
         s3.put_object(
             Bucket=bucket_staging,
             Key=f"{output_prefix}_{split_name}.csv",
