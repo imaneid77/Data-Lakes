@@ -16,19 +16,16 @@ def unpack_data(input_dir, bucket_name, output_file_name):
     s3 = boto3.client('s3', endpoint_url='http://localhost:4566')
     data_frames = []
 
-    # Iterate through train, test, and dev subfolders
-    for subfolder in ['train', 'test', 'dev']:
-        subfolder_path = os.path.join(input_dir, subfolder)
-        if os.path.exists(subfolder_path) and os.path.isdir(subfolder_path):
-            for file_name in os.listdir(subfolder_path):
-                file_path = os.path.join(subfolder_path, file_name)
-                print(f"Reading {file_path}")
-                data = pd.read_csv(
-                    file_path
-                )
-                data_frames.append(data)
-        else:
-            print(f"Subfolder {subfolder_path} does not exist or is not a directory.")
+    for file_name in os.listdir(input_dir):
+        if file_name.endswith('.csv') or 'data-' in file_name:
+            file_path = os.path.join(input_dir, file_name)
+            data = pd.read_parquet(
+                file_path,
+                names=['sequence', 'family_accession', 'sequence_name', 'aligned_sequence', 'family_id']
+            )
+            data_frames.append(data)
+    combined_data = pd.concat(data_frames, ignore_index=True)
+    combined_data.to_parquet(output_file_name, index=False)
 
     # Combine all data frames into a single data frame
     if data_frames:
@@ -37,7 +34,7 @@ def unpack_data(input_dir, bucket_name, output_file_name):
 
         # Save the combined data to a CSV file
         combined_csv_path = f"/tmp/{output_file_name}"  # Save locally before uploading
-        combined_data.to_csv(combined_csv_path, index=False)
+        combined_data.to_parquet(combined_csv_path, index=False)
         print(f"Combined file saved locally at {combined_csv_path}.")
 
         # Upload the combined file to the S3 bucket
